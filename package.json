@@ -1,0 +1,23 @@
+{
+  "name": "playwright-saucedemo-e2e",
+  "version": "1.0.0",
+  "description": "End-to-end automated testing for SauceDemo web application using Playwright.",
+  "main": "index.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Non-Spk/playwright-saucedemo-e2e.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Non-Spk/playwright-saucedemo-e2e/issues"
+  },
+  "homepage": "https://github.com/Non-Spk/playwright-saucedemo-e2e#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.59.0",
+    "@types/node": "^25.5.0"
+  }
+}
