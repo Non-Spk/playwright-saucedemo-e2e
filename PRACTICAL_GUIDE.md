@@ -164,11 +164,91 @@ npx playwright show-report
 
 ---
 
-## 4. Assertions with expect
+## 4. Page Object Model (POM)
+
+แยก logic การทำงานกับหน้าเว็บออกจาก test file เพื่อให้โค้ดอ่านง่าย ดูแลง่าย และ reuse ได้ ([Page Object Models | Playwright](https://playwright.dev/docs/pom))
+
+### 4.1 สร้าง Page Object
+
+สร้างโฟลเดอร์ `src/pages/` สำหรับเก็บ page objects แล้วสร้างไฟล์ `login.page.ts`:
+
+```ts
+import { Page } from '@playwright/test';
+
+export class LoginPage {
+    baseUrl = 'https://www.saucedemo.com/';
+
+    locatorUsername = '[data-test="username"]';
+    locatorPassword = '#password';
+    locatorButtonLogin = '//input[@data-test="login-button"]';
+
+    page: Page;
+
+    constructor(page: Page) {
+        this.page = page;
+    }
+
+    async goto() {
+        await this.page.goto(this.baseUrl);
+    }
+
+    async fillUserPassword(username: string, password: string) {
+        await this.page.locator(this.locatorUsername).fill(username);
+        await this.page.locator(this.locatorPassword).fill(password);
+    }
+
+    async clickLogin() {
+        await this.page.locator(this.locatorButtonLogin).click();
+    }
+
+    async getUsername() {
+        return await this.page.locator(this.locatorUsername).inputValue();
+    }
+
+    async getPassword() {
+        return await this.page.locator(this.locatorPassword).inputValue();
+    }
+}
+```
+
+หลักการ:
+- รับ `page: Page` ผ่าน constructor เพื่อใช้ Playwright API
+- เก็บ locator selectors เป็น property ไว้ที่เดียว - ถ้า UI เปลี่ยนแก้แค่จุดเดียว
+- แต่ละ method ทำหน้าที่เดียว (goto, fill, click, get value)
+
+### 4.2 ใช้ Page Object ใน test
+
+```ts
+import { test, expect } from '@playwright/test';
+import { LoginPage } from '../pages/login.page';
+
+test('Input fields should display as the data that was filled', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
+
+    await loginPage.fillUserPassword('testuser', 'password');
+    expect(await loginPage.getUsername()).toBe('testuser');
+    expect(await loginPage.getPassword()).toBe('password');
+});
+```
+
+โครงสร้างโปรเจคตอนนี้:
+
+```
+src/
+  pages/
+    login.page.ts       # Page Object
+  tests/
+    login.spec.ts       # Test file
+```
+
+---
+
+## 5. Assertions with expect
 
 `expect` คือฟังก์ชันสำหรับตรวจสอบผลลัพธ์ใน test ว่าตรงตามที่คาดหวังหรือไม่ ([Assertions | Playwright](https://playwright.dev/docs/test-assertions))
 
-### 4.1 Web-First Assertions (Auto-retrying)
+### 5.1 Web-First Assertions (Auto-retrying)
 
 Playwright มี assertions เฉพาะสำหรับ web ที่จะ retry อัตโนมัติจนกว่าเงื่อนไขจะเป็นจริง หรือจนกว่าจะ timeout (ค่าเริ่มต้น 5 วินาที) ต้องใช้ `await` เสมอ
 
@@ -187,7 +267,7 @@ assertions ที่ใช้บ่อย:
 | `await expect(page).toHaveURL('url')` | หน้าเว็บมี URL ตรงกับที่ระบุ |
 | `await expect(page).toHaveTitle('title')` | หน้าเว็บมี title ตรงกับที่ระบุ |
 
-### 4.2 Generic Assertions (Non-retrying)
+### 5.2 Generic Assertions (Non-retrying)
 
 assertions ทั่วไปที่ไม่มี auto-retry ใช้สำหรับตรวจสอบค่าที่ได้มาแล้ว ไม่ต้องใช้ `await`
 
@@ -199,44 +279,42 @@ assertions ทั่วไปที่ไม่มี auto-retry ใช้สำ
 | `expect(value).toContain(item)` | string มี substring หรือ array มี element |
 | `expect(value).toHaveLength(n)` | array หรือ string มีความยาวตามที่ระบุ |
 
-### 4.3 ตัวอย่างการใช้งานจริง
+### 5.3 ตัวอย่างการใช้งานจริง
 
-จากไฟล์ `src/tests/login.spec.ts` ที่เราเขียน:
+จากไฟล์ `src/tests/login.spec.ts` ที่ใช้ Page Object Model:
 
 ```ts
 import { test, expect } from '@playwright/test';
+import { LoginPage } from '../pages/login.page';
 
 test('Input fields should display as the data that was filled', async ({ page }) => {
-    await page.goto('https://www.saucedemo.com/');
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
 
-    // กรอกข้อมูลใน input field
-    await page.locator('[data-test="username"]').fill('testuser');
-    // ตรวจสอบค่าที่กรอก (non-retrying - ใช้ inputValue() ดึงค่ามาก่อน)
-    expect(await page.locator('[data-test="username"]').inputValue()).toBe('testuser');
-
-    await page.locator('#password').fill('password');
-    expect(await page.locator('#password').inputValue()).toBe('password');
+    await loginPage.fillUserPassword('testuser', 'password');
+    // non-retrying assertion - ใช้ getter ดึงค่ามาแล้วเทียบด้วย toBe()
+    expect(await loginPage.getUsername()).toBe('testuser');
+    expect(await loginPage.getPassword()).toBe('password');
 });
 ```
 
-วิธีข้างบนใช้ `inputValue()` ดึงค่ามาแล้วเทียบด้วย `toBe()` ซึ่งเป็น non-retrying assertion
+วิธีข้างบนใช้ `getUsername()` / `getPassword()` (ซึ่งภายในเรียก `inputValue()`) แล้วเทียบด้วย `toBe()` ซึ่งเป็น non-retrying assertion
 
 แนะนำให้ใช้ web-first assertion `toHaveValue()` แทน เพราะจะ retry อัตโนมัติ ลด flaky test:
 
 ```ts
-test('Input fields should display as the data that was filled (recommended)', async ({ page }) => {
-    await page.goto('https://www.saucedemo.com/');
+test('Input fields - recommended approach', async ({ page }) => {
+    const loginPage = new LoginPage(page);
+    await loginPage.goto();
 
-    await page.locator('[data-test="username"]').fill('testuser');
+    await loginPage.fillUserPassword('testuser', 'password');
     // web-first assertion - retry อัตโนมัติจนกว่า input จะมีค่าตรง
     await expect(page.locator('[data-test="username"]')).toHaveValue('testuser');
-
-    await page.locator('#password').fill('password');
     await expect(page.locator('#password')).toHaveValue('password');
 });
 ```
 
-### 4.4 Negating Assertions
+### 5.4 Negating Assertions
 
 ใช้ `.not` เพื่อตรวจสอบว่าเงื่อนไขไม่เป็นจริง:
 
@@ -245,7 +323,7 @@ await expect(page.locator('.error')).not.toBeVisible();
 expect(value).not.toBe(0);
 ```
 
-### 4.5 Soft Assertions
+### 5.5 Soft Assertions
 
 ปกติถ้า assertion fail จะหยุด test ทันที แต่ `expect.soft()` จะให้ test ทำงานต่อได้ แล้วค่อยรายงานผลรวมทีเดียว:
 
