@@ -109,10 +109,42 @@ test('Input fields should display as the data that was filled', async ({ page })
 ```
 
 - `test()` - ฟังก์ชันหลักสำหรับสร้าง test case
-- `page` - Playwright จะสร้าง browser page ให้อัตโนมัติผ่าน fixture
 - `page.goto()` - นำทางไปยัง URL ที่ต้องการทดสอบ
 
-### 3.2 รัน test
+### 3.2 Built-in Fixtures
+
+การเขียน `{ page }` ในพารามิเตอร์ของ test function คือการใช้ Built-in Fixtures ของ Playwright Test ([Fixtures | Playwright](https://playwright.dev/docs/test-fixtures))
+
+Fixtures เป็นกลไกที่ Playwright ใช้เตรียม environment ให้แต่ละ test โดยอัตโนมัติ เมื่อระบุชื่อ fixture ใน argument ของ test function Playwright จะ setup ให้เองและ isolate ระหว่าง test แต่ละตัว
+
+Built-in Fixtures ที่ใช้บ่อย:
+
+| Fixture | Type | คำอธิบาย |
+|---------|------|----------|
+| `page` | `Page` | browser page ที่ถูก isolate สำหรับแต่ละ test |
+| `context` | `BrowserContext` | browser context ที่ถูก isolate สำหรับแต่ละ test (page อยู่ภายใต้ context นี้) |
+| `browser` | `Browser` | browser instance ที่ใช้ร่วมกันระหว่าง tests |
+| `browserName` | `string` | ชื่อ browser ที่กำลังรัน (`chromium`, `firefox`, หรือ `webkit`) |
+| `request` | `APIRequestContext` | สำหรับทำ API request โดยไม่ต้องเปิด browser |
+
+ตัวอย่างการใช้งาน:
+
+```ts
+// ใช้แค่ page
+test('basic test', async ({ page }) => {
+    await page.goto('https://www.saucedemo.com/');
+});
+
+// ใช้หลาย fixtures พร้อมกัน
+test('test with context', async ({ page, context, browserName }) => {
+    console.log(`Running on ${browserName}`);
+    await page.goto('https://www.saucedemo.com/');
+});
+```
+
+Playwright จะ setup เฉพาะ fixtures ที่ test นั้นระบุไว้เท่านั้น ไม่ได้ setup ทุกตัวทุกครั้ง
+
+### 3.3 รัน test
 
 ```sh
 npx playwright test
@@ -128,4 +160,97 @@ npx playwright test src/tests/login.spec.ts
 
 ```sh
 npx playwright show-report
+```
+
+---
+
+## 4. Assertions with expect
+
+`expect` คือฟังก์ชันสำหรับตรวจสอบผลลัพธ์ใน test ว่าตรงตามที่คาดหวังหรือไม่ ([Assertions | Playwright](https://playwright.dev/docs/test-assertions))
+
+### 4.1 Web-First Assertions (Auto-retrying)
+
+Playwright มี assertions เฉพาะสำหรับ web ที่จะ retry อัตโนมัติจนกว่าเงื่อนไขจะเป็นจริง หรือจนกว่าจะ timeout (ค่าเริ่มต้น 5 วินาที) ต้องใช้ `await` เสมอ
+
+assertions ที่ใช้บ่อย:
+
+| Assertion | คำอธิบาย |
+|-----------|----------|
+| `await expect(locator).toBeVisible()` | element แสดงผลอยู่บนหน้า |
+| `await expect(locator).toBeHidden()` | element ถูกซ่อนอยู่ |
+| `await expect(locator).toBeEnabled()` | element สามารถใช้งานได้ |
+| `await expect(locator).toBeDisabled()` | element ถูก disable |
+| `await expect(locator).toHaveText('text')` | element มีข้อความตรงกับที่ระบุ |
+| `await expect(locator).toContainText('text')` | element มีข้อความที่ระบุอยู่ภายใน |
+| `await expect(locator).toHaveValue('value')` | input มีค่าตรงกับที่ระบุ |
+| `await expect(locator).toHaveAttribute('attr', 'val')` | element มี attribute ตรงกับที่ระบุ |
+| `await expect(page).toHaveURL('url')` | หน้าเว็บมี URL ตรงกับที่ระบุ |
+| `await expect(page).toHaveTitle('title')` | หน้าเว็บมี title ตรงกับที่ระบุ |
+
+### 4.2 Generic Assertions (Non-retrying)
+
+assertions ทั่วไปที่ไม่มี auto-retry ใช้สำหรับตรวจสอบค่าที่ได้มาแล้ว ไม่ต้องใช้ `await`
+
+| Assertion | คำอธิบาย |
+|-----------|----------|
+| `expect(value).toBe(expected)` | ค่าเท่ากันแบบ strict (===) |
+| `expect(value).toEqual(expected)` | ค่าเท่ากันแบบ deep equality |
+| `expect(value).toBeTruthy()` | ค่าเป็น truthy |
+| `expect(value).toContain(item)` | string มี substring หรือ array มี element |
+| `expect(value).toHaveLength(n)` | array หรือ string มีความยาวตามที่ระบุ |
+
+### 4.3 ตัวอย่างการใช้งานจริง
+
+จากไฟล์ `src/tests/login.spec.ts` ที่เราเขียน:
+
+```ts
+import { test, expect } from '@playwright/test';
+
+test('Input fields should display as the data that was filled', async ({ page }) => {
+    await page.goto('https://www.saucedemo.com/');
+
+    // กรอกข้อมูลใน input field
+    await page.locator('[data-test="username"]').fill('testuser');
+    // ตรวจสอบค่าที่กรอก (non-retrying - ใช้ inputValue() ดึงค่ามาก่อน)
+    expect(await page.locator('[data-test="username"]').inputValue()).toBe('testuser');
+
+    await page.locator('#password').fill('password');
+    expect(await page.locator('#password').inputValue()).toBe('password');
+});
+```
+
+วิธีข้างบนใช้ `inputValue()` ดึงค่ามาแล้วเทียบด้วย `toBe()` ซึ่งเป็น non-retrying assertion
+
+แนะนำให้ใช้ web-first assertion `toHaveValue()` แทน เพราะจะ retry อัตโนมัติ ลด flaky test:
+
+```ts
+test('Input fields should display as the data that was filled (recommended)', async ({ page }) => {
+    await page.goto('https://www.saucedemo.com/');
+
+    await page.locator('[data-test="username"]').fill('testuser');
+    // web-first assertion - retry อัตโนมัติจนกว่า input จะมีค่าตรง
+    await expect(page.locator('[data-test="username"]')).toHaveValue('testuser');
+
+    await page.locator('#password').fill('password');
+    await expect(page.locator('#password')).toHaveValue('password');
+});
+```
+
+### 4.4 Negating Assertions
+
+ใช้ `.not` เพื่อตรวจสอบว่าเงื่อนไขไม่เป็นจริง:
+
+```ts
+await expect(page.locator('.error')).not.toBeVisible();
+expect(value).not.toBe(0);
+```
+
+### 4.5 Soft Assertions
+
+ปกติถ้า assertion fail จะหยุด test ทันที แต่ `expect.soft()` จะให้ test ทำงานต่อได้ แล้วค่อยรายงานผลรวมทีเดียว:
+
+```ts
+await expect.soft(page.locator('#status')).toHaveText('Success');
+await expect.soft(page.locator('#message')).toHaveText('Done');
+// test จะทำงานต่อแม้ assertion ด้านบน fail
 ```
