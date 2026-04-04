@@ -537,3 +537,130 @@ src/
   utils/
     index.ts            # Utility Functions
 ```
+
+---
+
+## 9. Test Organization with describe
+
+### 9.1 จัดกลุ่ม test ด้วย test.describe
+
+ใช้ `test.describe()` เพื่อจัดกลุ่ม test cases ที่เกี่ยวข้องกันไว้ด้วยกัน ทำให้ report อ่านง่ายและจัดการ scope ของ hooks ได้:
+
+```ts
+test.describe('LOGIN FUNCTION', () => {
+    test.beforeEach(async ({ loginPage }) => {
+        await loginPage.goto();
+    });
+
+    test('TC-001: Input fields should display as the data that was filled', async ({ loginPage }) => {
+        // ...
+    });
+
+    test('TC-002: Should show an error message if log in without a username', async ({ loginPage }) => {
+        // ...
+    });
+});
+```
+
+หลักการ:
+- `test.describe()` ครอบ test cases ที่ทดสอบ feature เดียวกัน
+- `beforeEach` ภายใน describe จะทำงานเฉพาะ test ในกลุ่มนั้น
+- ใส่ TC number (TC-001, TC-002, ...) ใน test name เพื่อให้ trace กลับไปหา test case ได้ง่าย
+- report จะแสดงเป็นโครงสร้าง tree ตาม describe group
+
+### 9.2 ตัวอย่างโครงสร้าง test ที่จัดกลุ่มแล้ว
+
+```ts
+import { expect } from '@playwright/test';
+import { test } from '../pages/base';
+import { invalidUsers, lockedUsers, validUsers } from '../test-data/users';
+
+test.describe('LOGIN FUNCTION', () => {
+    test.beforeEach(async ({ loginPage }) => {
+        await loginPage.goto();
+    });
+
+    test('TC-001: Input fields should display as the data that was filled', async ({ loginPage }) => {
+        await loginPage.fillUserPassword('testuser', 'password');
+        expect(await loginPage.getUsername()).toBe('testuser');
+        expect(await loginPage.getPassword()).toBe('password');
+    });
+
+    validUsers.forEach(({ username, password }) => {
+        test(`TC-005: Should logged in successfully: ${username}`, async ({ loginPage }) => {
+            await loginPage.fillUserPassword(username, password);
+            await loginPage.clickLogin();
+            expect(loginPage.isValidUrl()).toBe(false);
+        });
+    });
+
+    lockedUsers.forEach(({ username, password }) => {
+        test(`TC-007: Should show locked out error: ${username}`, async ({ loginPage }) => {
+            await loginPage.fillUserPassword(username, password);
+            await loginPage.clickLogin();
+            const message = await loginPage.getErrorMessage();
+            expect(message).toBe('Epic sadface: Sorry, this user has been locked out.');
+            expect(loginPage.isValidUrl()).toBe(true);
+        });
+    });
+});
+```
+
+---
+
+## 10. Reporter, Trace, and Screenshot Configuration
+
+### 10.1 ตั้งค่า reporter
+
+ใน `playwright.config.ts` ปรับ reporter ให้สร้าง HTML report โดยไม่เปิด browser อัตโนมัติ:
+
+```ts
+reporter: [['html', { open: 'never' }]],
+```
+
+ค่า `open` ที่ใช้ได้:
+- `'always'` - เปิด report ทุกครั้งหลังรัน test
+- `'never'` - ไม่เปิดอัตโนมัติ ดูเองด้วย `npx playwright show-report`
+- `'on-failure'` - เปิดเฉพาะเมื่อมี test fail
+
+### 10.2 เปิด Trace และ Screenshot
+
+```ts
+use: {
+    trace: 'on',        // บันทึก trace ทุกครั้ง
+    screenshot: 'on',   // ถ่าย screenshot ทุกครั้ง
+    headless: false,     // เปิด browser ให้เห็น
+},
+```
+
+ค่า trace ที่ใช้ได้:
+- `'on'` - บันทึกทุก test
+- `'off'` - ไม่บันทึก
+- `'on-first-retry'` - บันทึกเฉพาะตอน retry (แนะนำสำหรับ CI)
+- `'retain-on-failure'` - เก็บเฉพาะ test ที่ fail
+
+ค่า screenshot ที่ใช้ได้:
+- `'on'` - ถ่ายทุก test
+- `'off'` - ไม่ถ่าย
+- `'only-on-failure'` - ถ่ายเฉพาะ test ที่ fail
+
+### 10.3 ดู Trace และ Report
+
+ดู HTML report:
+
+```sh
+npx playwright show-report
+```
+
+ดู trace ของ test ที่ต้องการ:
+
+```sh
+npx playwright show-trace test-results/<test-folder>/trace.zip
+```
+
+Trace viewer จะแสดง:
+- timeline ของทุก action ที่ทำ
+- screenshot ของแต่ละ step
+- network requests
+- console logs
+- DOM snapshot ณ แต่ละจุด
