@@ -375,3 +375,165 @@ await expect.soft(page.locator('#status')).toHaveText('Success');
 await expect.soft(page.locator('#message')).toHaveText('Done');
 // test จะทำงานต่อแม้ assertion ด้านบน fail
 ```
+
+---
+
+## 6. Test Data Management
+
+แยก test data ออกจาก test file เพื่อให้จัดการง่ายและ reuse ได้
+
+### 6.1 สร้างไฟล์ test data
+
+สร้างโฟลเดอร์ `src/test-data/` แล้วสร้างไฟล์ `users.ts`:
+
+```ts
+const validUsers = [
+    { username: 'standard_user', password: 'secret_sauce' },
+    { username: 'performance_glitch_user', password: 'secret_sauce' },
+    { username: 'visual_user', password: 'secret_sauce' },
+];
+
+const lockedUsers = [
+    { username: 'locked_out_user', password: 'secret_sauce' },
+];
+
+const invalidUsers = [
+    { username: 'standard_user', password: 'password' },
+];
+
+export { validUsers, lockedUsers, invalidUsers };
+```
+
+หลักการ:
+- แยก data ออกจาก test logic - เปลี่ยน data ได้โดยไม่ต้องแก้ test
+- จัดกลุ่ม data ตาม scenario (valid, invalid, locked)
+- ใช้ `export` เพื่อให้ test file อื่นเรียกใช้ได้
+
+---
+
+## 7. Utility Functions
+
+สร้าง helper functions ที่ใช้ร่วมกันทั้งโปรเจค
+
+### 7.1 สร้างไฟล์ utility
+
+สร้างโฟลเดอร์ `src/utils/` แล้วสร้างไฟล์ `index.ts`:
+
+```ts
+function removeSlashUrl(url: string = '') {
+    let newUrl = url;
+    if (url[url.length - 1] === '/') {
+        newUrl = url.substring(0, url.length - 1);
+    }
+    return newUrl;
+}
+
+module.exports = { removeSlashUrl };
+```
+
+### 7.2 ใช้ utility ใน Page Object
+
+```ts
+const { removeSlashUrl } = require('../utils');
+
+export class LoginPage {
+    // ...
+
+    isValidUrl() {
+        const actual_url = removeSlashUrl(this.page.url());
+        return actual_url === this.baseUrl;
+    }
+}
+```
+
+ใช้ `isValidUrl()` เพื่อตรวจสอบว่ายังอยู่หน้า login หรือถูก redirect ไปหน้าอื่นแล้ว (login สำเร็จ)
+
+---
+
+## 8. Test Hooks and Data-Driven Testing
+
+### 8.1 beforeEach - setup ก่อนทุก test
+
+ใช้ `test.beforeEach()` เพื่อรันโค้ดซ้ำก่อนทุก test case ลดการเขียนซ้ำ:
+
+```ts
+test.beforeEach(async ({ loginPage }) => {
+    await loginPage.goto();
+});
+```
+
+ทุก test ใน file นี้จะเปิดหน้า login ก่อนอัตโนมัติ ไม่ต้องเขียน `goto()` ในแต่ละ test
+
+### 8.2 Data-Driven Testing ด้วย forEach
+
+ใช้ `forEach` loop กับ test data เพื่อสร้าง test case หลายตัวจาก data set เดียว:
+
+```ts
+import { validUsers, invalidUsers, lockedUsers } from '../test-data/users';
+
+validUsers.forEach(({ username, password }) => {
+    test(`Should logged in successfully with valid credentials: ${username}`, async ({ loginPage }) => {
+        await loginPage.fillUserPassword(username, password);
+        await loginPage.clickLogin();
+        expect(loginPage.isValidUrl()).toBe(false); // redirect ออกจากหน้า login = สำเร็จ
+    });
+});
+
+invalidUsers.forEach(({ username, password }) => {
+    test(`Should show error with invalid credentials: ${username}`, async ({ loginPage }) => {
+        await loginPage.fillUserPassword(username, password);
+        await loginPage.clickLogin();
+        const message = await loginPage.getErrorMessage();
+        expect(message).toBe('Epic sadface: Username and password do not match any user in this service');
+        expect(loginPage.isValidUrl()).toBe(true); // ยังอยู่หน้า login = ล็อกอินไม่สำเร็จ
+    });
+});
+```
+
+หลักการ:
+- ใช้ template literal ใน test name เพื่อให้ report แสดงชื่อ user ที่ทดสอบ
+- แต่ละ item ใน array จะสร้าง test case แยกกัน - fail ตัวหนึ่งไม่กระทบตัวอื่น
+- เพิ่ม test data ใหม่ได้โดยไม่ต้องเขียน test เพิ่ม
+
+### 8.3 Error Message Validation
+
+เพิ่ม method `getErrorMessage()` ใน Page Object เพื่อดึงข้อความ error:
+
+```ts
+async getErrorMessage() {
+    try {
+        return await this.page.locator(this.locatorErrorMessage).textContent() || '';
+    } catch (error) {
+        return '';
+    }
+}
+```
+
+ใช้ `try/catch` เพื่อ handle กรณีที่ error element ไม่แสดง (เช่น login สำเร็จ)
+
+ตัวอย่าง test ที่ตรวจสอบ error message:
+
+```ts
+test('Should show error if log in without username', async ({ loginPage }) => {
+    await loginPage.fillUserPassword('', 'password');
+    await loginPage.clickLogin();
+    const message = await loginPage.getErrorMessage();
+    expect(message).toBe('Epic sadface: Username is required');
+    expect(loginPage.isValidUrl()).toBe(true);
+});
+```
+
+โครงสร้างโปรเจคตอนนี้:
+
+```
+src/
+  pages/
+    base.ts             # Custom Fixtures
+    login.page.ts       # Page Object
+  test-data/
+    users.ts            # Test Data
+  tests/
+    login.spec.ts       # Test file
+  utils/
+    index.ts            # Utility Functions
+```
