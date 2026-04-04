@@ -1,5 +1,5 @@
 import { Page } from '@playwright/test';
-const { removeSlashUrl } = require('../utils');
+import { removeSlashUrl } from '../utils';
 
 export class LoginPage {
     baseUrl = 'https://www.saucedemo.com';
