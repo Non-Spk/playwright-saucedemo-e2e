@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test';
 import { test } from '../pages/base'
 import { invalidUsers, lockedUsers, validUsers } from '../test-data/users'
+import translations from '../translations'
 
 test.describe('LOGIN FUNCTION', () => {
     test.beforeEach(async ({ loginPage }) => {
@@ -17,7 +18,7 @@ test.describe('LOGIN FUNCTION', () => {
         await loginPage.fillUserPassword('', 'password')
         await loginPage.clickLogin();
         const message = await loginPage.getErrorMessage();
-        expect(message).toBe('Epic sadface: Username is required');
+        expect(message).toBe(translations.login.error.usernameRequired);
         expect(loginPage.isValidUrl()).toBe(true);
     });
 
@@ -25,7 +26,7 @@ test.describe('LOGIN FUNCTION', () => {
         await loginPage.fillUserPassword('testuser', '')
         await loginPage.clickLogin();
         const message = await loginPage.getErrorMessage();
-        expect(message).toBe('Epic sadface: Password is required');
+        expect(message).toBe(translations.login.error.passwordRequired);
         expect(loginPage.isValidUrl()).toBe(true);
     });
 
@@ -33,7 +34,7 @@ test.describe('LOGIN FUNCTION', () => {
         await loginPage.fillUserPassword('', '')
         await loginPage.clickLogin();
         const message = await loginPage.getErrorMessage();
-        expect(message).toBe('Epic sadface: Username is required');
+        expect(message).toBe(translations.login.error.usernameRequired);
         expect(loginPage.isValidUrl()).toBe(true);
     });
 
@@ -50,7 +51,7 @@ test.describe('LOGIN FUNCTION', () => {
             await loginPage.fillUserPassword(username, password)
             await loginPage.clickLogin();
             const message = await loginPage.getErrorMessage();
-            expect(message).toBe('Epic sadface: Username and password do not match any user in this service');
+            expect(message).toBe(translations.login.error.invalidCredentials);
             expect(loginPage.isValidUrl()).toBe(true);
         });
     })
@@ -60,7 +61,7 @@ test.describe('LOGIN FUNCTION', () => {
             await loginPage.fillUserPassword(username, password)
             await loginPage.clickLogin();
             const message = await loginPage.getErrorMessage();
-            expect(message).toBe('Epic sadface: Sorry, this user has been locked out.');
+            expect(message).toBe(translations.login.error.lockedOut);
             expect(loginPage.isValidUrl()).toBe(true);
         });
     })

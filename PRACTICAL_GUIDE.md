@@ -664,3 +664,121 @@ Trace viewer จะแสดง:
 - network requests
 - console logs
 - DOM snapshot ณ แต่ละจุด
+
+---
+
+## 11. Translation Management for Expected Messages
+
+แยก expected messages ออกจาก test file เป็น JSON เพื่อจัดการง่าย รองรับหลายภาษา และไม่ต้อง hardcode string ซ้ำในหลาย test
+
+### 11.1 สร้างไฟล์ translation
+
+สร้างโฟลเดอร์ `src/translations/` แล้วสร้างไฟล์ `en.json`:
+
+```json
+{
+  "login": {
+    "error": {
+      "usernameRequired": "Epic sadface: Username is required",
+      "passwordRequired": "Epic sadface: Password is required",
+      "invalidCredentials": "Epic sadface: Username and password do not match any user in this service",
+      "lockedOut": "Epic sadface: Sorry, this user has been locked out."
+    }
+  }
+}
+```
+
+### 11.2 สร้าง translation loader
+
+สร้างไฟล์ `src/translations/index.ts`:
+
+```ts
+import en from './en.json';
+
+const translations: Record<string, typeof en> = { en };
+
+const locale = process.env.LOCALE || 'en';
+
+export default translations[locale] ?? translations['en'];
+```
+
+หลักการ:
+- ใช้ `process.env.LOCALE` เพื่อเลือกภาษา - ค่าเริ่มต้นเป็น `en`
+- fallback กลับไป `en` ถ้าไม่พบ locale ที่ระบุ
+- เพิ่มภาษาใหม่ได้โดยสร้างไฟล์ JSON เพิ่ม (เช่น `th.json`) แล้ว import เข้ามา
+
+### 11.3 ตั้งค่า tsconfig.json
+
+เพิ่ม `tsconfig.json` ที่ root เพื่อให้ TypeScript import JSON ได้:
+
+```json
+{
+  "compilerOptions": {
+    "resolveJsonModule": true,
+    "esModuleInterop": true
+  }
+}
+```
+
+- `resolveJsonModule` - อนุญาตให้ import ไฟล์ `.json` ได้
+- `esModuleInterop` - ให้ใช้ `import x from 'module'` กับ CommonJS modules ได้
+
+### 11.4 ใช้ translations ใน test
+
+```ts
+import { expect } from '@playwright/test';
+import { test } from '../pages/base';
+import translations from '../translations';
+
+test.describe('LOGIN FUNCTION', () => {
+    test('TC-002: Should show error without username', async ({ loginPage }) => {
+        await loginPage.fillUserPassword('', 'password');
+        await loginPage.clickLogin();
+        const message = await loginPage.getErrorMessage();
+        expect(message).toBe(translations.login.error.usernameRequired);
+        expect(loginPage.isValidUrl()).toBe(true);
+    });
+
+    test('TC-003: Should show error without password', async ({ loginPage }) => {
+        await loginPage.fillUserPassword('testuser', '');
+        await loginPage.clickLogin();
+        const message = await loginPage.getErrorMessage();
+        expect(message).toBe(translations.login.error.passwordRequired);
+        expect(loginPage.isValidUrl()).toBe(true);
+    });
+});
+```
+
+ข้อดี:
+- ถ้า message เปลี่ยน แก้แค่ใน JSON ไฟล์เดียว ไม่ต้องแก้ทุก test
+- TypeScript จะ autocomplete key ให้ เช่น `translations.login.error.` จะแสดงตัวเลือก
+- รองรับ multi-locale testing ผ่าน env var: `LOCALE=th npx playwright test`
+
+### 11.5 รันด้วย locale ที่ต้องการ
+
+```sh
+# ใช้ภาษาเริ่มต้น (en)
+npx playwright test
+
+# ระบุ locale
+LOCALE=th npx playwright test
+```
+
+โครงสร้างโปรเจคตอนนี้:
+
+```
+src/
+  pages/
+    base.ts             # Custom Fixtures
+    login.page.ts       # Page Object
+  test-data/
+    users.ts            # Test Data
+  tests/
+    login.spec.ts       # Test file
+  translations/
+    en.json             # English messages
+    index.ts            # Translation loader
+  utils/
+    index.ts            # Utility Functions
+tsconfig.json           # TypeScript config
+```
