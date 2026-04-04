@@ -232,11 +232,58 @@ test('Input fields should display as the data that was filled', async ({ page })
 });
 ```
 
+### 4.3 Custom Fixtures สำหรับ Page Object
+
+แทนที่จะสร้าง `new LoginPage(page)` ในทุก test สามารถสร้าง custom fixture เพื่อ inject page object เข้า test โดยตรง
+
+สร้างไฟล์ `src/pages/base.ts`:
+
+```ts
+import { test as base } from '@playwright/test';
+import { LoginPage } from './login.page';
+
+type baseFixtures = {
+    loginPage: LoginPage;
+};
+
+export const test = base.extend<baseFixtures>({
+    loginPage: async ({ page }, use) => {
+        await use(new LoginPage(page));
+    },
+});
+```
+
+หลักการ:
+- ใช้ `base.extend<T>()` เพื่อเพิ่ม fixture ใหม่เข้าไปใน `test`
+- กำหนด type `baseFixtures` เพื่อให้ TypeScript รู้จัก fixture ที่เพิ่มเข้ามา
+- ภายใน fixture ใช้ `use()` เพื่อส่ง instance ให้ test ใช้งาน
+- เมื่อเพิ่ม page object ใหม่ (เช่น `InventoryPage`) ก็เพิ่มเข้ามาใน type และ extend ได้เลย
+
+### 4.4 ใช้ Custom Fixture ใน test
+
+```ts
+import { expect } from '@playwright/test';
+import { test } from '../pages/base';
+
+test('Input fields should display as the data that was filled', async ({ loginPage }) => {
+    await loginPage.goto();
+    await loginPage.fillUserPassword('testuser', 'password');
+    expect(await loginPage.getUsername()).toBe('testuser');
+    expect(await loginPage.getPassword()).toBe('password');
+});
+```
+
+สังเกตว่า:
+- import `test` จาก `../pages/base` แทน `@playwright/test`
+- ใช้ `{ loginPage }` แทน `{ page }` - ไม่ต้องสร้าง instance เอง
+- โค้ดสั้นลงและอ่านง่ายขึ้น
+
 โครงสร้างโปรเจคตอนนี้:
 
 ```
 src/
   pages/
+    base.ts             # Custom Fixtures
     login.page.ts       # Page Object
   tests/
     login.spec.ts       # Test file
@@ -281,16 +328,14 @@ assertions ทั่วไปที่ไม่มี auto-retry ใช้สำ
 
 ### 5.3 ตัวอย่างการใช้งานจริง
 
-จากไฟล์ `src/tests/login.spec.ts` ที่ใช้ Page Object Model:
+จากไฟล์ `src/tests/login.spec.ts` ที่ใช้ Custom Fixture + Page Object Model:
 
 ```ts
-import { test, expect } from '@playwright/test';
-import { LoginPage } from '../pages/login.page';
+import { expect } from '@playwright/test';
+import { test } from '../pages/base';
 
-test('Input fields should display as the data that was filled', async ({ page }) => {
-    const loginPage = new LoginPage(page);
+test('Input fields should display as the data that was filled', async ({ loginPage }) => {
     await loginPage.goto();
-
     await loginPage.fillUserPassword('testuser', 'password');
     // non-retrying assertion - ใช้ getter ดึงค่ามาแล้วเทียบด้วย toBe()
     expect(await loginPage.getUsername()).toBe('testuser');
@@ -303,14 +348,12 @@ test('Input fields should display as the data that was filled', async ({ page })
 แนะนำให้ใช้ web-first assertion `toHaveValue()` แทน เพราะจะ retry อัตโนมัติ ลด flaky test:
 
 ```ts
-test('Input fields - recommended approach', async ({ page }) => {
-    const loginPage = new LoginPage(page);
+test('Input fields - recommended approach', async ({ loginPage }) => {
     await loginPage.goto();
-
     await loginPage.fillUserPassword('testuser', 'password');
     // web-first assertion - retry อัตโนมัติจนกว่า input จะมีค่าตรง
-    await expect(page.locator('[data-test="username"]')).toHaveValue('testuser');
-    await expect(page.locator('#password')).toHaveValue('password');
+    await expect(loginPage.page.locator('[data-test="username"]')).toHaveValue('testuser');
+    await expect(loginPage.page.locator('#password')).toHaveValue('password');
 });
 ```
 
